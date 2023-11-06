@@ -1,8 +1,13 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const jimp = require("jimp");
+const path = require("path");
 const { User } = require("../models/user");
-const { SECRET_KEY } = process.env;
 const { HttpError, ctrlWrapper } = require("../helpers");
+const { SECRET_KEY } = process.env;
+
+const avatarsDir = path.join(__dirname, "../", "public", "avatars");
 
 const register = async (req, res) => {
   const { email, password } = req.body;
@@ -13,8 +18,13 @@ const register = async (req, res) => {
   }
 
   const hashPassword = await bcrypt.hash(password, 10);
+  const avatarURL = gravatar.url(email);
 
-  const newUser = await User.create({ ...req.body, password: hashPassword });
+  const newUser = await User.create({
+    ...req.body,
+    password: hashPassword,
+    avatarURL,
+  });
 
   res.status(201).json({
     user: {
@@ -68,13 +78,26 @@ const getCurrent = async (req, res) => {
 };
 
 const updateSubscription = async (req, res) => {
-  await console.log(req.body);
   const { _id } = req.user;
-  const user = await User.findByIdAndUpdate(_id, req.body, { new: true });
+  const user = await User.findByIdAndUpdate(_id, req.body);
   if (!user) {
     throw HttpError(404);
   }
   res.json({ message: "Subscription changed" });
+};
+
+const updateAvatar = async (req, res) => {
+  const { _id } = req.user;
+  const { path: tempUpload, originalname } = req.file;
+  const filename = `${_id}_${originalname}`;
+  const avatar = await jimp.read(tempUpload);
+  await avatar.resize(250, 250).writeAsync(path.join(avatarsDir, filename));
+  const avatarURL = path.join("avatars", filename);
+  await User.findByIdAndUpdate(_id, { avatarURL });
+
+  res.json({
+    avatarURL,
+  });
 };
 
 module.exports = {
@@ -83,4 +106,5 @@ module.exports = {
   logout: ctrlWrapper(logout),
   getCurrent: ctrlWrapper(getCurrent),
   updateSubscription: ctrlWrapper(updateSubscription),
+  updateAvatar: ctrlWrapper(updateAvatar),
 };
